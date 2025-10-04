@@ -1,5 +1,3 @@
-id,name,role,salary
-1,Dev Goyal,Team Lead,75000.0
-2,Yash Sahni,Member 1,50000.0
-3,Alice Kumar,Member 2,60000.0
-4,Yash Sahn2i,Member2 1,50000.0
+id,name,role,salary,record_hash
+1,Dev Goyal,Team Lead,75000.0,bdc83629b649e6b2514ce9c3fd18957210875efff8b5e6111f8a4cb491572aa1
+3,Alice Kumar,Member 2,60000.0,172734d6c0c117900383701878445ff14153f2bd7d6ad342657e2f4390f22076
