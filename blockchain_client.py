@@ -13,7 +13,7 @@ print("✅ Connected to Sepolia testnet")
 # ----------------------------
 # Contract info
 # ----------------------------
-CONTRACT_ADDRESS = "0x870b594F2b7bd2316f084F9162e8B048FdafBC1f"  # Your Remix VM deployed contract
+CONTRACT_ADDRESS = "0xfD115a384aA50D3461650FF5aD5DB63768c5E037"  # Your Remix VM deployed contract
 CONTRACT_ABI = [
     {
         "inputs": [

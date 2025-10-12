@@ -1,5 +1,6 @@
 import psycopg2
 import hashlib
+from datetime import datetime
 from blockchain_client import push_hash, fetch_hash
 
 # ✅ Connect to PostgreSQL
@@ -12,69 +13,70 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-# ✅ Create table if not exists (no record_hash)
+# ✅ Create table if not exists (employee_id is now manually provided)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS secure_db (
-    name TEXT PRIMARY KEY,
+    employee_id INT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
     role TEXT,
-    salary TEXT
+    salary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """)
 conn.commit()
 
-
-def add_employee(name, role, salary):
+def add_employee(employee_id, name, role, salary):
     """Add new employee and push its hash to blockchain"""
-    # Compute hash (this will go only to blockchain)
-    data_to_hash = f"{name}{role}{salary}".encode('utf-8')
+    timestamp = datetime.now().isoformat()  # Current timestamp
+
+    # Compute hash including timestamp
+    data_to_hash = f"{employee_id}{name}{role}{salary}{timestamp}".encode('utf-8')
     record_hash = hashlib.sha256(data_to_hash).hexdigest()
 
-    # Insert into DB (no record_hash column now)
-    cursor.execute(
-        """
-        INSERT INTO secure_db (name, role, salary)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (name) DO UPDATE
-        SET role = EXCLUDED.role, salary = EXCLUDED.salary;
+    # Insert into DB
+    cursor.execute("""
+        INSERT INTO secure_db (employee_id, name, role, salary, created_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (employee_id) DO UPDATE
+        SET name = EXCLUDED.name, role = EXCLUDED.role, salary = EXCLUDED.salary, created_at = EXCLUDED.created_at;
         """,
-        (name, role, salary)
+        (employee_id, name, role, salary, timestamp)
     )
     conn.commit()
 
     # Push hash to blockchain
-    push_hash(name, record_hash)
-    print(f"✅ Employee {name} added successfully with hash:\n   {record_hash}")
+    push_hash(str(employee_id), record_hash)
+    print(f"✅ Employee {name} (ID: {employee_id}) added successfully with hash:\n   {record_hash}")
 
 
-def verify_integrity(name):
-    """Recompute hash from DB values and verify against blockchain hash"""
-    cursor.execute("SELECT name, role, salary FROM secure_db WHERE name = %s;", (name,))
+def verify_integrity(employee_id):
+    """Verify integrity of employee by ID"""
+    cursor.execute("SELECT employee_id, name, role, salary, created_at FROM secure_db WHERE employee_id = %s;", (employee_id,))
     row = cursor.fetchone()
 
     if not row:
         print("❌ Employee not found in database.")
         return
 
-    # Recompute hash from DB data
-    name, role, salary = row
-    combined_data = f"{name}{role}{salary}".encode('utf-8')
+    emp_id, name, role, salary, created_at = row
+    combined_data = f"{emp_id}{name}{role}{salary}{created_at.isoformat()}".encode('utf-8')
     new_hash = hashlib.sha256(combined_data).hexdigest()
 
-    # Fetch blockchain hash
-    blockchain_hash = fetch_hash(name)
+    blockchain_hash = fetch_hash(str(emp_id))
 
     print("\n🧾 Current Record:")
+    print(f"   ID: {emp_id}")
     print(f"   Name: {name}")
     print(f"   Role: {role}")
     print(f"   Salary: {salary}")
+    print(f"   Timestamp: {created_at}")
     print(f"\n🔍 Recomputed DB Hash: {new_hash}")
     print(f"⛓  Blockchain Hash:    {blockchain_hash}\n")
 
     if new_hash == blockchain_hash:
         print("✅ Integrity Verified — Record is Untampered.")
     else:
-        print("⚠️  ALERT: Data Tampering Detected!")
-        print("   Blockchain hash does NOT match current DB values.")
+        print("⚠️  ALERT: Data Tampering Detected! Blockchain hash mismatch.")
 
 
 # === 🧠 Interactive Menu ===
@@ -87,13 +89,14 @@ def main():
     while True:
         choice = input("\nEnter your choice (1/2/3): ").strip()
         if choice == "1":
+            employee_id = int(input("Enter employee ID: ").strip())
             name = input("Enter employee name: ").strip()
             role = input("Enter employee role: ").strip()
             salary = input("Enter employee salary: ").strip()
-            add_employee(name, role, salary)
+            add_employee(employee_id, name, role, salary)
         elif choice == "2":
-            name = input("Enter employee name to verify: ").strip()
-            verify_integrity(name)
+            employee_id = int(input("Enter employee ID to verify: ").strip())
+            verify_integrity(employee_id)
         elif choice == "3":
             print("👋 Exiting...")
             break
