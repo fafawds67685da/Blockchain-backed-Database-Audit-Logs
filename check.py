@@ -1,0 +1,6 @@
+from eth_account import Account
+acct = Account.create()                # creates random keypair
+private_key = acct.key.hex()           # 0x...
+address = acct.address                 # 0x...
+print("Address:", address)
+print("Private key:", private_key)

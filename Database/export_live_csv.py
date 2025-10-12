@@ -15,7 +15,7 @@ csv_file = "D:/Blockchain-backed-Database-Audit-Logs/Database/employees_live.csv
 
 while True:
     # Fetch data from employees table
-    df = pd.read_sql_query("SELECT * FROM employees", conn)
+    df = pd.read_sql_query("SELECT * FROM secure_db", conn)
     
     # Write to CSV (overwrite each time)
     df.to_csv(csv_file, index=False)

@@ -1,2 +1,7 @@
-INSERT INTO employees (name, role, salary) VALUES ('Yash Sahni', 'Member 1', 50000);
-INSERT INTO employees (name, role, salary) VALUES ('Alice Kumar', 'Member 2', 60000);
+UPDATE secure_db
+SET salary = '100'
+WHERE name = 'Dev';
+-- UPDATE secure_db
+
+SELECT * FROM secure_db;
+-- SELECT * FROM employees;
