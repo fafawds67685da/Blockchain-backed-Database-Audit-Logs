@@ -13,56 +13,58 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-# ✅ Create table if not exists (employee_id is now manually provided)
+# ✅ Drop and recreate table to ensure correct schema
+cursor.execute("DROP TABLE IF EXISTS secure_db;")
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS secure_db (
-    employee_id INT PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
     role TEXT,
     salary TEXT,
+    record_hash TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """)
 conn.commit()
 
-def add_employee(employee_id, name, role, salary):
+def add_employee(name, role, salary):
     """Add new employee and push its hash to blockchain"""
     timestamp = datetime.now().isoformat()  # Current timestamp
 
-    # Compute hash including timestamp
-    data_to_hash = f"{employee_id}{name}{role}{salary}{timestamp}".encode('utf-8')
+    # Compute hash including timestamp (without employee_id, as it's auto-generated)
+    data_to_hash = f"{name}{role}{salary}{timestamp}".encode('utf-8')
     record_hash = hashlib.sha256(data_to_hash).hexdigest()
 
-    # Insert into DB
+    # Insert into DB and return the generated ID
     cursor.execute("""
-        INSERT INTO secure_db (employee_id, name, role, salary, created_at)
+        INSERT INTO secure_db (name, role, salary, record_hash, created_at)
         VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (employee_id) DO UPDATE
-        SET name = EXCLUDED.name, role = EXCLUDED.role, salary = EXCLUDED.salary, created_at = EXCLUDED.created_at;
+        RETURNING id;
         """,
-        (employee_id, name, role, salary, timestamp)
+        (name, role, salary, record_hash, timestamp)
     )
+    employee_id = cursor.fetchone()[0]
     conn.commit()
 
-    # Push hash to blockchain
-    push_hash(str(employee_id), record_hash)
+    # Push hash to blockchain using employee ID
+    push_hash(name, record_hash)
     print(f"✅ Employee {name} (ID: {employee_id}) added successfully with hash:\n   {record_hash}")
 
 
 def verify_integrity(employee_id):
     """Verify integrity of employee by ID"""
-    cursor.execute("SELECT employee_id, name, role, salary, created_at FROM secure_db WHERE employee_id = %s;", (employee_id,))
+    cursor.execute("SELECT id, name, role, salary, record_hash, created_at FROM secure_db WHERE id = %s;", (employee_id,))
     row = cursor.fetchone()
 
     if not row:
         print("❌ Employee not found in database.")
         return
 
-    emp_id, name, role, salary, created_at = row
-    combined_data = f"{emp_id}{name}{role}{salary}{created_at.isoformat()}".encode('utf-8')
-    new_hash = hashlib.sha256(combined_data).hexdigest()
+    emp_id, name, role, salary, stored_hash, created_at = row
+    combined_data = f"{name}{role}{salary}{created_at.isoformat()}".encode('utf-8')
+    computed_hash = hashlib.sha256(combined_data).hexdigest()
 
-    blockchain_hash = fetch_hash(str(emp_id))
+    blockchain_hash = fetch_hash(name)
 
     print("\n🧾 Current Record:")
     print(f"   ID: {emp_id}")
@@ -70,13 +72,25 @@ def verify_integrity(employee_id):
     print(f"   Role: {role}")
     print(f"   Salary: {salary}")
     print(f"   Timestamp: {created_at}")
-    print(f"\n🔍 Recomputed DB Hash: {new_hash}")
-    print(f"⛓  Blockchain Hash:    {blockchain_hash}\n")
+    print(f"\n📊 Hash Comparison:")
+    print(f"   🔍 Stored DB Hash:     {stored_hash}")
+    print(f"   🔄 Recomputed Hash:    {computed_hash}")
+    print(f"   ⛓️  Blockchain Hash:    {blockchain_hash}\n")
 
-    if new_hash == blockchain_hash:
+    # Check all three hashes
+    if stored_hash == computed_hash == blockchain_hash:
         print("✅ Integrity Verified — Record is Untampered.")
+        print("   All hashes match: Data has not been modified.\n")
+    elif stored_hash == blockchain_hash and computed_hash != stored_hash:
+        print("⚠️  ALERT: Data Tampering Detected!")
+        print("   The data in the database has been modified after initial storage.")
+        print(f"   Original data hash: {stored_hash}")
+        print(f"   Current data hash:  {computed_hash}")
+        print("   The blockchain proves this record has been tampered with.\n")
     else:
-        print("⚠️  ALERT: Data Tampering Detected! Blockchain hash mismatch.")
+        print("⚠️  CRITICAL: Hash inconsistency detected!")
+        print("   Stored hash and blockchain hash don't match.")
+        print("   This may indicate database corruption or blockchain sync issues.\n")
 
 
 # === 🧠 Interactive Menu ===
@@ -89,11 +103,10 @@ def main():
     while True:
         choice = input("\nEnter your choice (1/2/3): ").strip()
         if choice == "1":
-            employee_id = int(input("Enter employee ID: ").strip())
             name = input("Enter employee name: ").strip()
             role = input("Enter employee role: ").strip()
             salary = input("Enter employee salary: ").strip()
-            add_employee(employee_id, name, role, salary)
+            add_employee(name, role, salary)
         elif choice == "2":
             employee_id = int(input("Enter employee ID to verify: ").strip())
             verify_integrity(employee_id)

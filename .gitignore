@@ -1,0 +1,7 @@
+.env
+*.pyc
+__pycache__/
+.vscode/
+node_modules/
+compiled_contract.json
+contract_abi.json

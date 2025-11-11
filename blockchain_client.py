@@ -1,76 +1,81 @@
 from web3 import Web3
+import json
+import os
+from dotenv import load_dotenv
 
-# ----------------------------
-# Connect to Infura Sepolia
-# ----------------------------
-INFURA_URL = "https://sepolia.infura.io/v3/b8493b4b87a64d9f978c6e81d46ef547"
-w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+load_dotenv()
 
-if not w3.is_connected():
-    raise Exception("Unable to connect to Sepolia via Infura")
-print("✅ Connected to Sepolia testnet")
+# Configuration
+INFURA_URL = os.getenv("INFURA_URL")
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+ACCOUNT_ADDRESS = os.getenv("ACCOUNT_ADDRESS")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
 
-# ----------------------------
-# Contract info
-# ----------------------------
-CONTRACT_ADDRESS = "0xfD115a384aA50D3461650FF5aD5DB63768c5E037"  # Your Remix VM deployed contract
-CONTRACT_ABI = [
-    {
-        "inputs": [
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "string", "name": "recordHash", "type": "string"}
-        ],
-        "name": "addHash",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "string", "name": "name", "type": "string"}],
-        "name": "getHash",
-        "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-        "stateMutability": "view",
-        "type": "function"
-    }
-]
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-contract = w3.eth.contract(address=Web3.to_checksum_address(CONTRACT_ADDRESS), abi=CONTRACT_ABI)
-
-# ----------------------------
-# Your Sepolia account info
-# ----------------------------
-ACCOUNT_ADDRESS = "0xC5b97376B9640E7E112CD9826E8B237B7bD00cDe"  # Example: "0x1234...abcd"
-PRIVATE_KEY = "00a181430af4d382362c3b14064f1fdb51bcf71ae36bf2ea0b52bf3ae9f38d0c"          # Keep this secret!
-
-account = Web3.to_checksum_address(ACCOUNT_ADDRESS)
-
-# ----------------------------
-# Push hash to blockchain
-# ----------------------------
-def push_hash(employee_name, record_hash):
-    nonce = w3.eth.get_transaction_count(account)
-
-    tx = contract.functions.addHash(employee_name, record_hash).build_transaction({
-        'from': account,
-        'nonce': nonce,
-        'gas': 300000,  # adjust if needed
-        'gasPrice': w3.to_wei('5', 'gwei')  # testnet, cheap gas
-    })
-
-    signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    print(f"✅ Hash for {employee_name} stored on Sepolia. TX: {tx_hash.hex()}")
-
-
-# ----------------------------
-# Fetch hash from blockchain
-# ----------------------------
-def fetch_hash(employee_name):
+# Load ABI - try v2 first, fallback to v1
+try:
+    abi_path_v2 = os.path.join(SCRIPT_DIR, 'contract_abi_v2.json')
+    with open(abi_path_v2, 'r') as f:
+        CONTRACT_ABI = json.load(f)
+    print("✅ Using V2 Contract ABI (Employee ID based)")
+except FileNotFoundError:
     try:
-        record_hash = contract.functions.getHash(employee_name).call()
-        return record_hash
+        abi_path_v1 = os.path.join(SCRIPT_DIR, 'contract_abi.json')
+        with open(abi_path_v1, 'r') as f:
+            CONTRACT_ABI = json.load(f)
+        print("⚠️ Using V1 Contract ABI (Name based)")
+    except FileNotFoundError:
+        print("❌ ERROR: No contract ABI file found!")
+        print(f"Looking for files in: {SCRIPT_DIR}")
+        print("Please ensure contract_abi_v2.json or contract_abi.json exists")
+        raise
+
+# Connect to blockchain
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
+
+print(f"Connected to Sepolia: {w3.is_connected()}")
+
+def push_hash(employee_id: int, record_hash: str):
+    """Push hash to blockchain using employee ID as key"""
+    try:
+        # Convert hash string to bytes32
+        if record_hash.startswith('0x'):
+            hash_bytes = bytes.fromhex(record_hash[2:])
+        else:
+            hash_bytes = bytes.fromhex(record_hash)
+        
+        # Build transaction
+        nonce = w3.eth.get_transaction_count(ACCOUNT_ADDRESS)
+        txn = contract.functions.addHash(employee_id, hash_bytes).build_transaction({
+            'chainId': 11155111,
+            'gas': 200000,
+            'gasPrice': w3.eth.gas_price,
+            'nonce': nonce,
+        })
+        
+        # Sign and send
+        signed_txn = w3.eth.account.sign_transaction(txn, private_key=PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        
+        # Wait for confirmation
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        print(f"✅ Hash pushed to blockchain for Employee ID {employee_id}. Tx: {tx_hash.hex()}")
+        return receipt
     except Exception as e:
-        print(f"❌ Error fetching hash for {employee_name}: {str(e)}")
+        print(f"❌ Error pushing hash: {e}")
         return None
+
+def fetch_hash(employee_id: int) -> str:
+    """Fetch hash from blockchain using employee ID"""
+    try:
+        hash_bytes = contract.functions.getHash(employee_id).call()
+        # Return hex string or empty hash if not found
+        if hash_bytes == b'\x00' * 32:
+            return "0" * 64  # Not found in blockchain
+        return hash_bytes.hex()
+    except Exception as e:
+        print(f"❌ Error fetching hash for ID {employee_id}: {e}")
+        return "0" * 64  # Return empty hash on error
