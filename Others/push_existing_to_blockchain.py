@@ -1,7 +1,7 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from blockchain_client import push_hash
+from Others.blockchain_client import push_hash
 import time
 
 load_dotenv()

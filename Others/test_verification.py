@@ -1,4 +1,4 @@
-from blockchain_client import fetch_hash
+from Others.blockchain_client import fetch_hash
 import psycopg2
 import os
 from dotenv import load_dotenv

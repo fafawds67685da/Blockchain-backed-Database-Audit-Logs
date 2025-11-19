@@ -1,7 +1,7 @@
 import psycopg2
 import hashlib
 from datetime import datetime
-from blockchain_client import push_hash, fetch_hash
+from Others.blockchain_client import push_hash, fetch_hash
 
 # ✅ Connect to PostgreSQL
 conn = psycopg2.connect(

@@ -17,8 +17,8 @@ from functools import lru_cache
 from time import time
 
 sys.path.append('..')
-from blockchain_client import push_hash, fetch_hash, w3
-from email_notifier import send_tampering_alert
+from Others.blockchain_client import push_hash, fetch_hash, w3
+from Others.email_notifier import send_tampering_alert
 
 load_dotenv()
 
